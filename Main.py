@@ -2,7 +2,9 @@ import time
 import json
 from datetime import datetime
 from playwright.sync_api import sync_playwright
+from playwright_stealth import stealth_sync
 
+"""BARE BRUK DISCORDCHATEXPORTER SOM DU KAN LASTE NED. DENNA HER FUNKA IKKE PGA BLOKKERT AV AUTOMATIONDETECTION!!"""
 
 def transform_cookie(cookie):
     """
@@ -33,6 +35,9 @@ def transform_cookie(cookie):
 
 
 def get_oldest_timestamp(page):
+    """
+    Returns the oldest timestamp (as ISO string) from the loaded messages on the page.
+    """
     oldest = page.evaluate('''() => {
         const times = Array.from(document.querySelectorAll('time[datetime]')).map(el => el.getAttribute("datetime"));
         if (times.length === 0) return null;
@@ -47,6 +52,11 @@ def get_oldest_timestamp(page):
 
 
 def scroll_to_top(page, scroll_delay=2, scroll_amount=-2000, cutoff_date=None):
+    """
+    Scrolls upward through the chat history until no more new messages are loaded
+    or until the oldest message is older than the cutoff_date (if provided).
+    Uses the outer container with role="group" and a class starting with "scroller__".
+    """
     prev_scroll = None
     while True:
         page.evaluate('''(amount) => {
@@ -79,6 +89,10 @@ def scroll_to_top(page, scroll_delay=2, scroll_amount=-2000, cutoff_date=None):
 
 
 def extract_messages(page):
+    """
+    Extracts messages from the Discord channel by querying the DOM.
+    Returns a list of dictionaries with message details.
+    """
     messages = page.evaluate('''() => {
         const msgNodes = document.querySelectorAll('div[id^="message-content-"]');
         const msgs = [];
@@ -108,7 +122,7 @@ def extract_messages(page):
 
 def main():
     output_file = "discord_channel.json"
-    cookie_file = "discord_cookies.json"  # Ensure this file is in the same directory as your script.
+    cookie_file = "discord_cookies.json"  # Ensure this file exists in the same directory as your script.
 
     cutoff_input = input(
         "Enter cutoff date (YYYY-MM-DD) to stop scrolling at older messages, or leave blank for full history: ").strip()
@@ -124,7 +138,9 @@ def main():
         context = p.chromium.launch_persistent_context(
             user_data_dir="my-user-data-dir",
             headless=False,
-            args=["--disable-blink-features=AutomationControlled"]
+            args=["--disable-blink-features=AutomationControlled",
+                  "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                  "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"]
         )
 
         try:
@@ -140,6 +156,16 @@ def main():
 
         page = context.new_page()
         page.goto("https://discord.com/channels/@me")
+
+        # Wait for the page to load completely
+        page.wait_for_load_state("networkidle")
+
+        # Now apply stealth modifications after the page has loaded
+        stealth_sync(page)
+
+        # Optionally force a reload if needed (uncomment the next two lines if you want to try a reload)
+        # time.sleep(5)
+        # page.reload()
 
         input("Check if you're logged in. Press Enter once confirmed...")
 
