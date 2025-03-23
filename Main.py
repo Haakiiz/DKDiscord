@@ -6,21 +6,29 @@ import json
 def scroll_to_top(page, scroll_delay=2, scroll_amount=-2000):
     """
     Scrolls upward through the chat history until no more new messages are loaded.
+    Uses the outer container with role="group" and a class starting with "scroller__".
     """
-    prev_height = None
+    prev_scroll = None
     while True:
-        page.mouse.wheel(0, scroll_amount)
+        # Scroll the outer container by the given amount (negative scroll_amount scrolls up)
+        page.evaluate('''(amount) => {
+            const scroller = document.querySelector('div[role="group"][class^="scroller__"]');
+            if (scroller) {
+                scroller.scrollBy(0, amount);
+            }
+        }''', scroll_amount)
         time.sleep(scroll_delay)
-        current_height = page.evaluate('''() => {
-            // Using the new selector for the scroll container
-            const el = document.querySelector('ol[class^="scrollerInner__"]');
-            return el ? el.scrollHeight : 0;
+        # Check the current scrollTop position
+        current_scroll = page.evaluate('''() => {
+            const scroller = document.querySelector('div[role="group"][class^="scroller__"]');
+            return scroller ? scroller.scrollTop : 0;
         }''')
-        if prev_height == current_height:
+        print("Current scroll position:", current_scroll)
+        # If scroll position hasn't changed or we've reached the very top (scrollTop==0), stop scrolling
+        if current_scroll == prev_scroll or current_scroll == 0:
             print("Reached the top of the channel history.")
             break
-        prev_height = current_height
-
+        prev_scroll = current_scroll
 
 
 def extract_messages(page):
@@ -73,7 +81,7 @@ def main():
         context = browser.new_context()
         page = context.new_page()
 
-        # Navigate to Discord. Adjust the URL if you have a direct link to the channel.
+        # Navigate to Discord – adjust the URL if you have a direct link to the channel.
         discord_url = "https://discord.com/channels/@me"
         print(f"Navigating to {discord_url}")
         page.goto(discord_url)
