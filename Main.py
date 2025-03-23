@@ -1,15 +1,38 @@
-from playwright.sync_api import sync_playwright
 import time
 import json
 from datetime import datetime
+from playwright.sync_api import sync_playwright
 
+
+def transform_cookie(cookie):
+    """
+    Transforms a cookie from the exported format into the format expected by Playwright.
+    """
+    new_cookie = {
+        "name": cookie["name"],
+        "value": cookie["value"],
+        "domain": cookie["domain"],
+        "path": cookie["path"],
+        "httpOnly": cookie["httpOnly"],
+        "secure": cookie["secure"],
+    }
+
+    same_site = cookie.get("sameSite", "").lower()
+    if same_site == "lax":
+        new_cookie["sameSite"] = "Lax"
+    elif same_site == "strict":
+        new_cookie["sameSite"] = "Strict"
+    elif same_site == "no_restriction":
+        new_cookie["sameSite"] = "None"
+    else:
+        new_cookie["sameSite"] = "Lax"
+
+    if not cookie.get("session", False) and "expirationDate" in cookie:
+        new_cookie["expires"] = int(cookie["expirationDate"])
+    return new_cookie
 
 
 def get_oldest_timestamp(page):
-    """
-    Returns the oldest timestamp (as ISO string) from the loaded messages on the page.
-    If no timestamps are found, returns None.
-    """
     oldest = page.evaluate('''() => {
         const times = Array.from(document.querySelectorAll('time[datetime]')).map(el => el.getAttribute("datetime"));
         if (times.length === 0) return null;
@@ -24,20 +47,8 @@ def get_oldest_timestamp(page):
 
 
 def scroll_to_top(page, scroll_delay=2, scroll_amount=-2000, cutoff_date=None):
-    """
-    Scrolls upward through the chat history until no more new messages are loaded
-    or until the oldest message is older than the cutoff_date (if provided).
-    Uses the outer container with role="group" and a class starting with "scroller__".
-
-    Args:
-        page: The Playwright page instance.
-        scroll_delay: Seconds to wait between scrolls.
-        scroll_amount: The pixel amount to scroll per iteration.
-        cutoff_date: A datetime object. Scrolling will stop when messages older than this date are loaded.
-    """
     prev_scroll = None
     while True:
-        # Scroll the outer container by the given amount (negative scroll_amount scrolls up)
         page.evaluate('''(amount) => {
             const scroller = document.querySelector('div[role="group"][class^="scroller__"]');
             if (scroller) {
@@ -46,25 +57,21 @@ def scroll_to_top(page, scroll_delay=2, scroll_amount=-2000, cutoff_date=None):
         }''', scroll_amount)
         time.sleep(scroll_delay)
 
-        # Check the current scroll position
         current_scroll = page.evaluate('''() => {
             const scroller = document.querySelector('div[role="group"][class^="scroller__"]');
             return scroller ? scroller.scrollTop : 0;
         }''')
         print("Current scroll position:", current_scroll)
 
-        # If cutoff_date is provided, check the oldest message timestamp on the page.
         if cutoff_date:
             oldest_iso = get_oldest_timestamp(page)
             if oldest_iso:
                 oldest_dt = datetime.fromisoformat(oldest_iso.replace("Z", "+00:00"))
                 print("Oldest loaded message date:", oldest_dt.isoformat())
-                # If the oldest loaded message is earlier than (or equal to) the cutoff, stop scrolling.
                 if oldest_dt <= cutoff_date:
                     print("Reached the cutoff date. Stopping scroll.")
                     break
 
-        # If scroll position hasn't changed or we've reached the top (scrollTop==0), stop scrolling.
         if current_scroll == prev_scroll or current_scroll == 0:
             print("Reached the top of the channel history.")
             break
@@ -72,34 +79,21 @@ def scroll_to_top(page, scroll_delay=2, scroll_amount=-2000, cutoff_date=None):
 
 
 def extract_messages(page):
-    """
-    Extracts messages from the Discord channel by querying the DOM.
-    Returns a list of dictionaries with message details.
-    """
     messages = page.evaluate('''() => {
-        // Select all message content divs by id prefix
         const msgNodes = document.querySelectorAll('div[id^="message-content-"]');
         const msgs = [];
         msgNodes.forEach(node => {
-            // Get the message content id and extract the unique suffix.
             const messageContentId = node.getAttribute("id");
             const suffix = messageContentId.replace("message-content-", "");
-
-            // Combine text from all nested span elements in the content div.
             let content = "";
             const spans = node.querySelectorAll("span");
             spans.forEach(span => {
                 content += span.innerText;
             });
-
-            // Extract the username using the corresponding message-username id.
             const usernameElem = document.getElementById("message-username-" + suffix);
             const author = usernameElem ? usernameElem.innerText.trim() : "Unknown";
-
-            // Extract the timestamp using the corresponding message-timestamp id.
             const timestampElem = document.getElementById("message-timestamp-" + suffix);
             const timestamp = timestampElem ? timestampElem.getAttribute("datetime") : null;
-
             msgs.push({
                 "id": messageContentId,
                 "author": author,
@@ -114,13 +108,13 @@ def extract_messages(page):
 
 def main():
     output_file = "discord_channel.json"
+    cookie_file = "discord_cookies.json"  # Ensure this file is in the same directory as your script.
 
-    # Ask the user for an optional cutoff date in YYYY-MM-DD format.
-    cutoff_input = input("Enter cutoff date (YYYY-MM-DD) to stop scrolling at older messages, or leave blank for full history: ").strip()
+    cutoff_input = input(
+        "Enter cutoff date (YYYY-MM-DD) to stop scrolling at older messages, or leave blank for full history: ").strip()
     cutoff_date = None
     if cutoff_input:
         try:
-            # Assume UTC for simplicity.
             cutoff_date = datetime.fromisoformat(cutoff_input)
             print(f"Cutoff date set to: {cutoff_date.isoformat()}")
         except Exception as e:
@@ -130,18 +124,25 @@ def main():
         context = p.chromium.launch_persistent_context(
             user_data_dir="my-user-data-dir",
             headless=False,
-            args=[
-                "--disable-blink-features=AutomationControlled",
-                "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
-            ]
+            args=["--disable-blink-features=AutomationControlled"]
         )
+
+        try:
+            with open(cookie_file, "r", encoding="utf-8") as f:
+                raw_cookies = json.load(f)
+            cookies = [transform_cookie(cookie) for cookie in raw_cookies]
+            context.add_cookies(cookies)
+            print(f"Loaded and transformed {len(cookies)} cookies from {cookie_file}.")
+        except Exception as e:
+            print("Failed to load cookies. Please ensure the cookie file exists and is in the correct format.")
+            context.close()
+            return
 
         page = context.new_page()
         page.goto("https://discord.com/channels/@me")
 
-        input("Please log in manually and complete any CAPTCHA. Then press Enter here...")
+        input("Check if you're logged in. Press Enter once confirmed...")
 
-        # Your scrolling and extraction code goes here.
         print("Scrolling through chat history. This may take a while if there are many messages...")
         scroll_to_top(page, cutoff_date=cutoff_date)
 
@@ -153,6 +154,7 @@ def main():
         print(f"Chat log with {len(messages)} messages saved to {output_file}.")
 
         context.close()
+
 
 if __name__ == "__main__":
     main()
