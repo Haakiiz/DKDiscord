@@ -27,7 +27,7 @@
 },
 {
     "domain": ".discord.com",
-    "expirationDate": 1777320082.803287,
+    "expirationDate": 1777320530.005268,
     "hostOnly": false,
     "httpOnly": false,
     "name": "_ga",
@@ -41,7 +41,7 @@
 },
 {
     "domain": ".discord.com",
-    "expirationDate": 1777320082.80303,
+    "expirationDate": 1777320530.004974,
     "hostOnly": false,
     "httpOnly": false,
     "name": "_ga_Q149DFWHT7",
@@ -50,7 +50,7 @@
     "secure": false,
     "session": false,
     "storeId": "0",
-    "value": "GS1.1.1742758562.1.1.1742760082.0.0.0",
+    "value": "GS1.1.1742758562.1.1.1742760529.0.0.0",
     "id": 4
 },
 {
@@ -83,7 +83,7 @@
 },
 {
     "domain": ".discord.com",
-    "expirationDate": 1774296082,
+    "expirationDate": 1774296529,
     "hostOnly": false,
     "httpOnly": false,
     "name": "OptanonConsent",
@@ -92,12 +92,12 @@
     "secure": false,
     "session": false,
     "storeId": "0",
-    "value": "isIABGlobal=false&datestamp=Sun+Mar+23+2025+21%3A01%3A22+GMT%2B0100+(sentraleuropeisk+normaltid)&version=6.33.0&hosts=&landingPath=NotLandingPage&groups=C0001%3A1%2CC0002%3A1%2CC0003%3A1&geolocation=NO%3B03&AwaitingReconsent=false",
+    "value": "isIABGlobal=false&datestamp=Sun+Mar+23+2025+21%3A08%3A49+GMT%2B0100+(sentraleuropeisk+normaltid)&version=6.33.0&hosts=&landingPath=NotLandingPage&groups=C0001%3A1%2CC0002%3A1%2CC0003%3A1&geolocation=NO%3B03&AwaitingReconsent=false",
     "id": 7
 },
 {
     "domain": "discord.com",
-    "expirationDate": 1757269857.78312,
+    "expirationDate": 1757269857,
     "hostOnly": true,
     "httpOnly": true,
     "name": "__dcfduid",
@@ -111,7 +111,7 @@
 },
 {
     "domain": "discord.com",
-    "expirationDate": 1757269857.783237,
+    "expirationDate": 1757269857,
     "hostOnly": true,
     "httpOnly": true,
     "name": "__sdcfduid",
