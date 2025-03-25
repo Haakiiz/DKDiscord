@@ -64,10 +64,9 @@ def chunk_messages_by_tokens(messages: List[Dict[str, Any]]) -> List[List[Dict[s
     current_chars = 0
 
     for msg in tqdm(messages, desc="Chunking messages by tokens", unit="msg"):
-        content = f"{msg.get('timestamp', 'N/A')} - {msg.get('username', 'N/A')}: {msg.get('content', '').strip().replace('', ' ')}"
+        content = f"{msg.get('timestamp', 'N/A')} - {msg.get('username', 'N/A')}: {msg.get('content', '').strip().replace('\\n', ' ')}"
         token_count = count_tokens(content)
         char_count = len(content)
-
 
         if (current_tokens + token_count > CHUNK_TOKEN_LIMIT or current_chars + char_count > MAX_CHAR_LENGTH) and current_chunk:
             chunks.append(current_chunk)
@@ -78,9 +77,6 @@ def chunk_messages_by_tokens(messages: List[Dict[str, Any]]) -> List[List[Dict[s
         current_chunk.append(msg)
         current_tokens += token_count
         current_chars += char_count
-
-    print(f"detta er token count {current_tokens}")
-    print(f"Detta er char_count: {current_chars}")
 
     if current_chunk:
         chunks.append(current_chunk)
@@ -103,7 +99,7 @@ def call_llm_for_chunk(chunk, chunk_index, max_retries=5):
     for attempt in range(max_retries):
         try:
             response = client.responses.create(
-                model="gpt-4o-mini",
+                model="gpt-4o",
                 input=prompt
             )
             output = getattr(response, "output_text", "")
