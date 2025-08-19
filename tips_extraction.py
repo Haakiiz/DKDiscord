@@ -17,7 +17,7 @@ from openai import OpenAI
 # -------------------------
 # Config / Defaults
 # -------------------------
-DEFAULT_MODEL = "gpt-5-mini"         # higher quality than nano for summarization
+DEFAULT_MODEL = "gpt-5-nano"         # higher quality than nano for summarization
 ENCODING_NAME = "o200k_base"         # works for 4o/5-series models with 200k ctx
 CONTEXT_WINDOW = 200_000             # token context of the model (adjust if needed)
 MAX_OUTPUT_TOKENS = 4_096            # how much we want back per chunk
@@ -147,7 +147,6 @@ def call_llm(input_messages: List[Dict[str, str]], model: str) -> str:
                 model=model,
                 input=input_messages,
                 max_output_tokens=MAX_OUTPUT_TOKENS,
-                temperature=0.2,
             )
             return getattr(resp, "output_text", "").strip()
         except Exception as e:
