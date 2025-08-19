@@ -8,50 +8,35 @@ from openai import OpenAI
 
 client = OpenAI()
 MAX_TOKENS = 128000
-encoder = tiktoken.encoding_for_model("gpt-4o-mini")
+encoder = tiktoken.encoding_for_model("gpt-4o")
 
 def count_tokens(text):
     return len(encoder.encode(text))
 
-BASE_PROMPT = """Extract and summarize actionable insights from a large JSON file containing Discord chat logs about a game lacking comprehensive in-game hints, focusing on specified categories of interest.
+BASE_PROMPT = """Developer: You have access to the JSON export of messages from a Discord channel focused on the game "Door Kickers 2: Task Force North."
 
-# Steps
+Begin with a concise checklist (3-7 bullets) outlining your approach to analyzing and summarizing the chat data.
 
-1. **Data Loading**: Access and load the JSON file containing the Discord chat logs.
-2. **Categorization**:
-   - Identify relevant messages that fit under the following categories:
-     - **Gameplay Tips & Tricks**: Strategies, mechanics, and insights not immediately obvious or documented.
-     - **Keyboard Shortcuts & Controls**: Essential key combinations and shortcuts not officially documented.
-     - **Optimal Loadouts & Character Builds**: Endorsed loadouts and character builds, including specific recommendations.
-     - **Hidden or Secret Features**: Game elements discovered through experimentation.
-3. **Information Extraction**:
-   - Extract pertinent information from every message that fits any of the above categories.
-4. **Insight Summarization**:
-   - Summarize each identified message into concise, actionable insights, maintaining focus on relevancy and practicality.
-5. **Formatting**:
-   - Present information as a numbered list, formatted as: `[number]. [timestamp] - [username]: [message content]`
+Please analyze the chat data and generate the following, presented in clear natural language with distinct headers:
 
-# Output Format
+# Executive Summary
+Provide a concise overview of recent activity, overarching themes, and the general tone of the conversations.
 
-- First, put the relevant category along with a very short description in the title with markdown formatting (e.g. ## Keyboard Shortcuts & Controls - Shortcut for throwing grenades)
-- Format: `[number]. [timestamp] - [username]: [message content]`
+# Categorized Discussion Topics
+Summarize significant discussion topics, each under its own subheader. For each, include:
+- Main topic or discussion theme
+- Critical points or highlights relating to this topic
+- Number of unique users who participated
+- Excerpts from notable messages (with author and timestamp)
 
-# Examples
+Requested categories include:
+- Game updates
+- Notable in-game strategies or tips
+- Reveals or statements from developers
+- News or insights about the game's development
+- Major or extended discussion threads
 
-**Example Start**
-## Keyboard Shortcuts & Controls - Dodge rolls
-1. [1630225600] - User123: Discovering you can dodge roll using Ctrl + Shift + Z boosts survival against enemy waves significantly.
-2. [1630225700] - GameDev99: If you equip the Shadow Cloak and Light Bow, your stealth multipliers make it easy to clear the Dark Forest map.
-
-(Note: Real examples will be longer and contain game-specific insights; ensure all content pertains to the categories specified.)
-
-**Example End**
-
-# Notes
-
-- Focus strictly on extracting relevant information from the content, ignoring messages that do not contribute to the specified categories.
-- Exclude general commentary, off-topic discussions, and irrelevant chat data.
-- Ensure that the output remains free of metadata and extraneous information beyond the required format."""
+If you do not find relevant topics or discussions in the chat data, state under Executive Summary: "No relevant discussions found in the provided chat log." and omit the Categorized Discussion Topics section."""
 
 RESERVED_TOKENS_FOR_PROMPT = count_tokens(BASE_PROMPT)
 CHUNK_TOKEN_LIMIT = MAX_TOKENS - RESERVED_TOKENS_FOR_PROMPT
@@ -103,7 +88,7 @@ def call_llm_for_chunk(chunk, chunk_index, max_retries=5):
     for attempt in range(max_retries):
         try:
             response = client.responses.create(
-                model="gpt-4o-mini",
+                model="gpt-5-nano",
                 input=prompt
             )
             output = getattr(response, "output_text", "")
@@ -119,7 +104,7 @@ def call_llm_for_chunk(chunk, chunk_index, max_retries=5):
                 return chunk_index, f"Error: {e}"
 
 def main():
-    with open("cleaned_discord.json", "r", encoding="utf-8") as f:
+    with open("Door Kickers - dev_q_and_a 01.03.2025-19.08.2025].json", "r", encoding="utf-8") as f:
         data = json.load(f)
 
     messages = data.get("messages")
