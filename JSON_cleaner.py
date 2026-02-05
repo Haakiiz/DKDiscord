@@ -31,6 +31,6 @@ def clean_discord_json(input_file, output_file):
 
 
 if __name__ == "__main__":
-    input_file = "Door Kickers - dev_q_and_a [341526814876762113].json"  # Replace with your exported JSON filename
+    input_file = "Door Kickers - dev_q_and_a 01.03.2025-19.08.2025].json"  # Replace with your exported JSON filename
     output_file = "cleaned_discord.json"  # The file to write the cleaned data to
     clean_discord_json(input_file, output_file)

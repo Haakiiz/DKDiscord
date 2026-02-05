@@ -17,8 +17,11 @@ from openai import OpenAI
 # Config / Defaults
 # =========================
 DEFAULT_MODEL = os.getenv("DK2_MODEL", "gpt-4o-mini")  # safer default; override with --model or env
+DEFAULT_GROK_MODEL = os.getenv("DK2_GROK_MODEL", "grok-4-1-fast-non-reasoning")
+DEFAULT_PROVIDER = os.getenv("DK2_PROVIDER", "openai")
 ENCODING_NAME = "o200k_base"
 CONTEXT_WINDOW = 128_000
+GROK_CONTEXT_WINDOW = 2_000_000
 MAX_OUTPUT_TOKENS = 2048
 SAFETY_MARGIN_TOKENS = 800
 MAX_WORKERS = int(os.getenv("DK2_MAX_WORKERS", "6"))
@@ -175,13 +178,13 @@ def build_line_from_message(msg: Dict[str, Any]) -> str:
 # Chunking
 # =========================
 
-def compute_chunk_budget() -> int:
+def compute_chunk_budget(context_window: int) -> int:
     reserved = count_tokens(BASE_TASK_PROMPT) + count_tokens(BASE_SYSTEM_PROMPT) + SAFETY_MARGIN_TOKENS + MAX_OUTPUT_TOKENS
-    return max(1024, CONTEXT_WINDOW - reserved)
+    return max(1024, context_window - reserved)
 
 
-def chunk_lines(lines: List[str]) -> List[List[str]]:
-    chunk_token_limit = compute_chunk_budget()
+def chunk_lines(lines: List[str], context_window: int) -> List[List[str]]:
+    chunk_token_limit = compute_chunk_budget(context_window)
     chunks: List[List[str]] = []
     cur: List[str] = []
     tks = 0
@@ -227,11 +230,25 @@ def build_user_content_from_chunk(chunk_lines: List[str]) -> str:
 client = OpenAI()
 
 
+def load_dotenv(path: Path) -> None:
+    if not path.exists():
+        return
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip("'").strip('"')
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
 def _responses_api(prompt: str, model: str) -> str:
     resp = client.responses.create(
         model=model,
         input=prompt,
-        max_tokens=MAX_OUTPUT_TOKENS,
+        max_output_tokens=MAX_OUTPUT_TOKENS,
     )
     return (getattr(resp, "output_text", "") or "").strip()
 
@@ -249,10 +266,18 @@ def _chat_api(user_content_1: str, user_content_2: str, model: str) -> str:
     return (chat.choices[0].message.content or "").strip()
 
 
-def call_llm(prompt_for_responses: str, user_content_for_chat: Tuple[str, str], model: str, prefer: str) -> str:
+def call_llm(
+    prompt_for_responses: str,
+    user_content_for_chat: Tuple[str, str],
+    model: str,
+    prefer: str,
+    allow_chat: bool,
+) -> str:
     last_err = None
 
-    order = [prefer, "chat" if prefer == "responses" else "responses"]
+    order = [prefer]
+    if allow_chat:
+        order = [prefer, "chat" if prefer == "responses" else "responses"]
     for api in order:
         for attempt in range(RETRY_MAX):
             try:
@@ -280,7 +305,13 @@ def call_llm(prompt_for_responses: str, user_content_for_chat: Tuple[str, str], 
 # Summarize + Merge
 # =========================
 
-def summarize_chunk(chunk_lines: List[str], chunk_index: int, model: str, prefer_api: str) -> Tuple[int, str]:
+def summarize_chunk(
+    chunk_lines: List[str],
+    chunk_index: int,
+    model: str,
+    prefer_api: str,
+    allow_chat: bool,
+) -> Tuple[int, str]:
     user_slice = build_user_content_from_chunk(chunk_lines)
     prompt = BASE_TASK_PROMPT + "\n\n=== CHAT SLICE ===\n" + user_slice
     logging.info(f"Summarizing chunk {chunk_index} — chars={len(prompt):,} tokens≈{count_tokens(prompt):,}")
@@ -290,13 +321,14 @@ def summarize_chunk(chunk_lines: List[str], chunk_index: int, model: str, prefer
         user_content_for_chat=(BASE_TASK_PROMPT, "=== CHAT SLICE ===\n" + user_slice),
         model=model,
         prefer=prefer_api,
+        allow_chat=allow_chat,
     )
     return chunk_index, out
 
 
-def merge_summaries(partials: List[str], model: str, prefer_api: str) -> str:
+def merge_summaries(partials: List[str], model: str, prefer_api: str, allow_chat: bool, context_window: int) -> str:
     body = "\n\n".join([f"=== Partial Report {i+1} ===\n{p}" for i, p in enumerate(partials)])
-    budget = CONTEXT_WINDOW - (count_tokens(MERGE_PROMPT) + count_tokens(BASE_SYSTEM_PROMPT) + SAFETY_MARGIN_TOKENS + MAX_OUTPUT_TOKENS)
+    budget = context_window - (count_tokens(MERGE_PROMPT) + count_tokens(BASE_SYSTEM_PROMPT) + SAFETY_MARGIN_TOKENS + MAX_OUTPUT_TOKENS)
     body = truncate_by_tokens(body, max(1024, budget))
 
     prompt = MERGE_PROMPT + "\n\n" + body
@@ -307,6 +339,7 @@ def merge_summaries(partials: List[str], model: str, prefer_api: str) -> str:
         user_content_for_chat=(MERGE_PROMPT, body),
         model=model,
         prefer=prefer_api,
+        allow_chat=allow_chat,
     )
     return out
 
@@ -331,7 +364,9 @@ def write_file(path: Path, text: str) -> None:
 def main():
     parser = argparse.ArgumentParser(description="Summarize a Discord channel export with robust OpenAI fallbacks (TXT outputs).")
     parser.add_argument("input", help="Path to JSON export with a top-level 'messages' array.")
+    parser.add_argument("--provider", choices=["openai", "grok"], default=DEFAULT_PROVIDER, help=f"LLM provider (default {DEFAULT_PROVIDER})")
     parser.add_argument("--model", default=DEFAULT_MODEL, help=f"OpenAI model (default {DEFAULT_MODEL})")
+    parser.add_argument("--grok-model", default=DEFAULT_GROK_MODEL, help=f"Grok model (default {DEFAULT_GROK_MODEL})")
     parser.add_argument("--max-workers", type=int, default=MAX_WORKERS, help="Concurrent chunk calls (default %(default)s).")
     parser.add_argument("--merge", action="store_true", help="Also merge chunk summaries into one final report.")
     parser.add_argument("--out-dir", default=".", help="Output directory (default current).")
@@ -339,6 +374,24 @@ def main():
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    load_dotenv(Path(".env"))
+
+    provider = args.provider
+    allow_chat = provider == "openai"
+    if provider == "grok" and args.prefer_api != "responses":
+        logging.warning("Grok provider forces prefer-api=responses.")
+        args.prefer_api = "responses"
+    if provider == "grok":
+        api_key = os.getenv("XAI_API_KEY")
+        if not api_key:
+            raise SystemExit("XAI_API_KEY is not set.")
+        global client
+        client = OpenAI(api_key=api_key, base_url="https://api.x.ai/v1")
+        model = args.grok_model
+        context_window = GROK_CONTEXT_WINDOW
+    else:
+        model = args.model
+        context_window = CONTEXT_WINDOW
 
     in_path = Path(args.input)
     out_dir = Path(args.out_dir)
@@ -351,11 +404,14 @@ def main():
     lines: List[str] = [build_line_from_message(m) for m in messages]
 
     # Chunk
-    chunks = chunk_lines(lines)
+    chunks = chunk_lines(lines, context_window)
 
     results: List[str] = ["" for _ in range(len(chunks))]
     with cf.ThreadPoolExecutor(max_workers=args.max_workers) as ex:
-        futs = {ex.submit(summarize_chunk, chunk, i+1, args.model, args.prefer_api): i for i, chunk in enumerate(chunks)}
+        futs = {
+            ex.submit(summarize_chunk, chunk, i + 1, model, args.prefer_api, allow_chat): i
+            for i, chunk in enumerate(chunks)
+        }
         for fut in tqdm(cf.as_completed(futs), total=len(futs), desc="LLM Calls", unit="chunk"):
             idx = futs[fut]
             try:
@@ -371,7 +427,13 @@ def main():
     write_file(chunks_out, "\n\n".join([f"=== Chunk {i+1} ===\n{t}" for i, t in enumerate(results)]))
 
     if args.merge:
-        final_report = merge_summaries(results, model=args.model, prefer_api=args.prefer_api)
+        final_report = merge_summaries(
+            results,
+            model=model,
+            prefer_api=args.prefer_api,
+            allow_chat=allow_chat,
+            context_window=context_window,
+        )
         final_out = out_dir / f"dk2_final_report_{today}.txt"
         write_file(final_out, final_report)
 

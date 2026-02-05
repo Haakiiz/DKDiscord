@@ -9,13 +9,11 @@ import math # Import math for ceil
 INPUT_JSON_FILE = "1.2 Generalchat_cleaned_discord.json"
 OUTPUT_TXT_FILE = "doorkickers2_tips.txt"
 
-# !!! MAJOR SECURITY WARNING !!!
-# Embedding API keys directly in code is insecure and risky.
-# If this code is shared or exposed, your key will be compromised.
-# Consider using environment variables (os.environ.get('GEMINI_API_KEY'))
-# or a configuration file instead for better security.
-# You have been warned.
-API_KEY = "INSERT API KEY" # <<< YOUR API KEY IS HERE
+# Use environment variables for secrets.
+# Set GEMINI_API_KEY in your shell or .env file.
+API_KEY = os.getenv("GEMINI_API_KEY")
+if not API_KEY:
+    raise SystemExit("GEMINI_API_KEY is not set. Export it before running this script.")
 
 # Rate limit: 10 requests per minute -> 60 seconds / 10 requests = 6 seconds per request minimum.
 # Add a small buffer.
