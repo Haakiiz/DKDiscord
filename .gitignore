@@ -1,0 +1,19 @@
+# Secrets / env
+.env
+.env.*
+
+# Browser session data / cookies — NEVER commit
+*cookies*.json
+my-user-data-dir/
+user-data-dir/
+
+# IDE / tooling
+.idea/
+.claude/
+.vscode/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
