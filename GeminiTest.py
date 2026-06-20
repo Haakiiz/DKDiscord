@@ -24,15 +24,12 @@ RATE_LIMIT_DELAY_SECONDS = 6.1
 # --- Gemini Configuration ---
 try:
     genai.configure(api_key=API_KEY)
-    # Using the specific model requested by the user
-    MODEL_NAME = 'models/gemini-1.5-flash-latest' # Using stable flash model name
-    # Note: 'gemini-2.0-flash-thinking-exp-01-21' seems to be causing issues or might be deprecated/renamed.
-    # Let's try the standard 'gemini-1.5-flash-latest' which has good performance and limits.
-    # If you specifically need the experimental one and it exists under a different name, adjust MODEL_NAME.
-    # Standard Flash Limits (Free Tier): RPM: 15, TPM: 1,000,000
-    # Adjust RATE_LIMIT_DELAY_SECONDS if using a model with different RPM.
-    # For 15 RPM: 60 / 15 = 4 seconds. Let's use 4.1
-    RATE_LIMIT_DELAY_SECONDS = 4.1 # Adjusted for 15 RPM of gemini-1.5-flash
+    # Newest Flash model (Google I/O, May 2026). GA, no preview suffix.
+    MODEL_NAME = 'gemini-3.5-flash'
+    # 1M token context window, 65k max output tokens, thinking support.
+    # Adjust RATE_LIMIT_DELAY_SECONDS to match your tier's RPM (60 / RPM seconds per request).
+    # The free-tier default below is conservative; raise the throughput by lowering this on a paid tier.
+    RATE_LIMIT_DELAY_SECONDS = 4.1 # ~15 RPM; tune to your account's actual rate limit
 
     model = genai.GenerativeModel(MODEL_NAME)
     print(f"Gemini API configured successfully using model: {MODEL_NAME}")
